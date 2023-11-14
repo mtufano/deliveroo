@@ -1,2 +1,3 @@
 url_collector/data
 *.txt
+deliveroo_crawler/deliveroo_data.db
