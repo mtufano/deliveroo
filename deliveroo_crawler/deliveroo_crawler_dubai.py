@@ -40,6 +40,9 @@ class DeliverooScraper:
             self.__details_json = self.make_json(self.__bs4_data)
             if self.__details_json:
                 self.fetch_restaurant_details(self.__details_json)
+                self.fetch_restaurant_location(self.__details_json)  # Ensure this is called
+                self.__restaurant_menu_details = self.extract_menu_items(self.__details_json)  # Extract menu items here
+
 
     @staticmethod
     def url_validator(link: str) -> bool:
@@ -94,36 +97,36 @@ class DeliverooScraper:
             logging.error(f"Error in fetch_restaurant_details: {e}")
 
     def fetch_restaurant_location(self, details_json):
-        rest = details_json['props']['initialState']['menuPage']['menu']['meta']['customerLocation']
-        lat = rest['lat']
-        lon = rest['lon']
-        city = rest['city']
-        neighborhood = rest['neighborhood']
-        postcode = rest['postcode']
-        cityId = rest['cityId']
-        zoneId = rest['zoneId']
-        geohash = rest['geohash']
+        rest_location = details_json['props']['initialState']['menuPage']['menu']['meta']['customerLocation']
+        self.__restaurant_details['lat'] = rest_location.get('lat', 'Unknown Latitude')
+        self.__restaurant_details['lon'] = rest_location.get('lon', 'Unknown Longitude')
+        self.__restaurant_details['city'] = rest_location.get('city', 'Unknown City')
+        self.__restaurant_details['neighborhood'] = rest_location.get('neighborhood', 'Unknown Neighborhood')
+        self.__restaurant_details['postcode'] = rest_location.get('postcode', 'Unknown Postcode')
+        self.__restaurant_details['cityId'] = rest_location.get('cityId', 'Unknown City ID')
+        self.__restaurant_details['zoneId'] = rest_location.get('zoneId', 'Unknown Zone ID')
+        self.__restaurant_details['geohash'] = rest_location.get('geohash', 'Unknown Geohash')
+        return self.__restaurant_details
 
     def extract_menu_items(self, details_json):
         menu_items = details_json['props']['initialState']['menuPage']['menu']['meta']['items']
-        extracted_data = []
+        menu_data = []
 
         for item in menu_items:
             name = item.get('name', 'No Name')
             description = item.get('description', 'No Description')
-            price_formatted = item.get('price', {}).get('formatted', 'No Price')
-            price_formatted = price_formatted.replace('AED\xa0', '')
+            price = item.get('price', {}).get('formatted', 'No Price').replace('AED\xa0', '')
             image_data = item.get('image')
             image_url = image_data.get('url') if image_data else 'No Image URL'
 
-            extracted_data.append({
+            menu_data.append({
                 'name': name,
                 'description': description,
-                'price_formatted (AED)': price_formatted,
+                'price': price,
                 'image_url': image_url	
             })
 
-        return extracted_data
+        return menu_data
     
     def save_to_db(self, db_name: str):
         # Create or connect to a SQLite database
@@ -168,16 +171,43 @@ class DeliverooScraper:
 
         # Insert menu items
         for item in self.__restaurant_menu_details:
-            c.execute('INSERT INTO menu (restaurant_id, name, description, price) VALUES (?, ?, ?, ?)',
-                        (restaurant_id, item['name'], item['description'], item['price_formatted'], item['image_url']))
+            c.execute('INSERT INTO menu (restaurant_id, name, description, price, image_url) VALUES (?, ?, ?, ?, ?)',
+                        (restaurant_id, item['name'], item['description'], item['price'], item['image_url']))
 
         # Commit and close
         conn.commit()
         conn.close()
 
-# Modify existing methods to call save_to_db after data extraction
+
+# Function to read URLs from a file
+def read_urls_from_file(file_path):
+    with open(file_path, 'r') as file:
+        return [line.strip() for line in file.readlines()]
+
+# Function to scrape URLs
+def scrape_urls(file_path, db_name):
+    urls = read_urls_from_file(file_path)
+    failed_urls = []
+
+    for url in urls:
+        try:
+            # Replace '=ASAP' with '=anytime' in the URL
+            url = url.replace('=ASAP', '=anytime')
+
+            scraper = DeliverooScraper(url)
+            scraper.save_to_db(db_name)
+        except Exception as e:
+            print(f"Failed to scrape {url}: {e}")
+            failed_urls.append(url)
+
+    # Optionally, save the failed URLs to a file or handle them as needed
+    with open('failed_urls.txt', 'w') as file:
+        for url in failed_urls:
+            file.write(url + '\n')
 
 # Example usage
-url = "https://deliveroo.ae/menu/Dubai/dubai-creek/kutsara-at-tinidor?day=today&geohash=thrrg50szgc9&time=ASAP"
-scraper = DeliverooScraper(url)
-scraper.save_to_db("deliveroo_data.db")
+input_file = "../url_collector/data/dubai/dubai_rest_links_deliveroo_unique.txt"  # Path to the file containing URLs
+scrape_urls(input_file, "deliveroo_data.db")
+
+# Example usage
+#url = "https://deliveroo.ae/menu/Dubai/dubai-creek/kutsara-at-tinidor?day=today&geohash=thrrg50szgc9&time=anytime"
