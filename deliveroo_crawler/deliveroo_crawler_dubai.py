@@ -96,36 +96,46 @@ class DeliverooScraper:
         except Exception as e:
             logging.error(f"Error in fetch_restaurant_details: {e}")
 
-    def fetch_restaurant_location(self, details_json):
-        rest_location = details_json['props']['initialState']['menuPage']['menu']['meta']['customerLocation']
-        self.__restaurant_details['lat'] = rest_location.get('lat', 'Unknown Latitude')
-        self.__restaurant_details['lon'] = rest_location.get('lon', 'Unknown Longitude')
-        self.__restaurant_details['city'] = rest_location.get('city', 'Unknown City')
-        self.__restaurant_details['neighborhood'] = rest_location.get('neighborhood', 'Unknown Neighborhood')
-        self.__restaurant_details['postcode'] = rest_location.get('postcode', 'Unknown Postcode')
-        self.__restaurant_details['cityId'] = rest_location.get('cityId', 'Unknown City ID')
-        self.__restaurant_details['zoneId'] = rest_location.get('zoneId', 'Unknown Zone ID')
-        self.__restaurant_details['geohash'] = rest_location.get('geohash', 'Unknown Geohash')
-        return self.__restaurant_details
+    def fetch_restaurant_details(self, details_json):
+        try:
+            restaurant = details_json['props']['initialState']['menuPage']['menu']['meta']['restaurant']
+            self.__restaurant_details['name'] = restaurant.get('name', 'Unknown Name').lower().replace(" ", "_")
+            self.__restaurant_details['address'] = restaurant.get('location', {}).get('address', {}).get('address1', 'Unknown Address')
+            self.__restaurant_details['neighborhood'] = restaurant.get('location', {}).get('address', {}).get('neighborhood', 'Unknown Neighborhood')
+        except KeyError as e:
+            logging.error(f"Key error while fetching restaurant details: {e}")
+            self.__restaurant_details['name'] = 'Unknown Name'
+            self.__restaurant_details['address'] = 'Unknown Address'
+            self.__restaurant_details['neighborhood'] = 'Unknown Neighborhood'
+        except Exception as e:
+            logging.error(f"Error in fetch_restaurant_details: {e}")
 
     def extract_menu_items(self, details_json):
         menu_items = details_json['props']['initialState']['menuPage']['menu']['meta']['items']
         menu_data = []
 
         for item in menu_items:
-            name = item.get('name', 'No Name')
-            description = item.get('description', 'No Description')
-            price = item.get('price', {}).get('formatted', 'No Price').replace('AED\xa0', '')
-            image_data = item.get('image')
-            image_url = image_data.get('url') if image_data else 'No Image URL'
+            try:
+                name = item.get('name', 'No Name')
+                description = item.get('description', 'No Description')
+                price = item.get('price', {}).get('formatted', 'No Price').replace('AED\xa0', '')
+                image_data = item.get('image')
+                image_url = image_data.get('url') if image_data else 'No Image URL'
 
-            menu_data.append({
-                'name': name,
-                'description': description,
-                'price': price,
-                'image_url': image_url	
-            })
+                menu_data.append({
+                    'name': name,
+                    'description': description,
+                    'price': price,
+                    'image_url': image_url    
+                })
+            except KeyError as e:
+                logging.error(f"Key error while fetching menu item: {e}")
+                continue  # Skip this item and continue with the next
+            except Exception as e:
+                logging.error(f"Error in extract_menu_items: {e}")
+                continue  # Skip this item and continue with the next
 
+        return menu_data
         return menu_data
     
     def save_to_db(self, db_name: str):
@@ -201,13 +211,13 @@ def scrape_urls(file_path, db_name):
             failed_urls.append(url)
 
     # Optionally, save the failed URLs to a file or handle them as needed
-    with open('failed_urls.txt', 'w') as file:
+    with open('failed_urls_2.txt', 'w') as file:
         for url in failed_urls:
             file.write(url + '\n')
 
 # Example usage
-input_file = "../url_collector/data/dubai/dubai_rest_links_deliveroo.txt"  # Path to the file containing URLs
-scrape_urls(input_file, "deliveroo_data.db")
+input_file = "failed_urls.txt"  # Path to the file containing URLs
+scrape_urls(input_file, "deliveroo_dubai_27614failed.db")
 
 # Example usage
 #url = "https://deliveroo.ae/menu/Dubai/dubai-creek/kutsara-at-tinidor?day=today&geohash=thrrg50szgc9&time=anytime"
