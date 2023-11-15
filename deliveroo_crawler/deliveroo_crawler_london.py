@@ -49,7 +49,7 @@ class DeliverooScraper:
 
     @staticmethod
     def url_validator(link: str) -> bool:
-        return validators.url(link) and link.startswith('https://deliveroo.ae/')
+        return validators.url(link) and link.startswith('https://deliveroo.co.uk/')
 
     @staticmethod
     def fetch_details(url):
@@ -245,7 +245,7 @@ def scrape_urls(file_path, db_name):
     failed_urls = []
 
     # Define the maximum number of threads
-    MAX_THREADS = 50  # Start with a lower number and adjust as needed
+    MAX_THREADS = 5  # Start with a lower number and adjust as needed
 
     # Using ThreadPoolExecutor to create and manage threads
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
@@ -268,8 +268,8 @@ def scrape_urls(file_path, db_name):
             file.write(url + '\n')
 
 # Example usage
-input_file = "../url_collector/data/dubai/dubai_rest_links_deliveroo.txt"  # Path to the file containing URLs
-scrape_urls(input_file, "deliveroo_dubai_2.db")
+input_file = "../url_collector/data/london_rest_links_deliveroo.txt"  # Path to the file containing URLs
+scrape_urls(input_file, "deliveroo_london.db")
 
 
 # Example usage

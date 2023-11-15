@@ -43,7 +43,7 @@ class DeliverooScraper:
             self.__details_json = self.make_json(self.__bs4_data)
             if self.__details_json:
                 self.fetch_restaurant_details(self.__details_json)
-                self.fetch_restaurant_location()  # Ensure this is called
+                #self.fetch_restaurant_location(self.__details_json)  # Ensure this is called
                 self.__restaurant_menu_details = self.extract_menu_items(self.__details_json)  # Extract menu items here
 
 
@@ -103,36 +103,6 @@ class DeliverooScraper:
         except Exception as e:
             logging.error(f"Error in fetch_restaurant_details: {e}")
 
-    def fetch_restaurant_location(self):
-        try:
-            restaurant_location = self.__details_json['props']['initialState']['menuPage']['menu']['meta']['customerLocation']
-            self.__restaurant_details['lat'] = restaurant_location.get('lat', 'Unknown Latitude')
-            self.__restaurant_details['lon'] = restaurant_location.get('lon', 'Unknown Longitude')
-            self.__restaurant_details['city'] = restaurant_location.get('city', 'Unknown City')
-            self.__restaurant_details['neighborhood'] = restaurant_location.get('neighborhood', 'Unknown Neighborhood')
-            self.__restaurant_details['postcode'] = restaurant_location.get('postcode', 'Unknown Postcode')
-            self.__restaurant_details['cityId'] = restaurant_location.get('cityId', 'Unknown City ID')
-            self.__restaurant_details['zoneId'] = restaurant_location.get('zoneId', 'Unknown Zone ID')
-            self.__restaurant_details['geohash'] = restaurant_location.get('geohash', 'Unknown Geohash')
-
-        except KeyError as e:
-            logging.error(f"Key error while fetching restaurant location: {e}")
-            # Set default values for all location details in case of KeyError
-            self.__restaurant_details.update({
-                'lat': 'Unknown Latitude',
-                'lon': 'Unknown Longitude',
-                'city': 'Unknown City',
-                'neighborhood': 'Unknown Neighborhood',
-                'postcode': 'Unknown Postcode',
-                'cityId': 'Unknown City ID',
-                'zoneId': 'Unknown Zone ID',
-                'geohash': 'Unknown Geohash'
-            })
-
-        except Exception as e:
-            logging.error(f"Error in fetch_restaurant_location: {e}")
-
-
     def extract_menu_items(self, details_json):
         menu_items = details_json['props']['initialState']['menuPage']['menu']['meta']['items']
         menu_data = []
@@ -161,61 +131,54 @@ class DeliverooScraper:
         return menu_data
     
     def save_to_db(self, db_name: str):
-        try:
-            # Create or connect to a SQLite database
-            with sqlite3.connect(db_name) as conn:
-                c = conn.cursor()
+        # Create or connect to a SQLite database
+        conn = sqlite3.connect(db_name)
+        c = conn.cursor()
 
-                # Create tables if they don't exist
-                c.execute('''CREATE TABLE IF NOT EXISTS restaurant (
-                                id INTEGER PRIMARY KEY,
-                                name TEXT,
-                                address TEXT,
-                                neighborhood TEXT,
-                                lat REAL,
-                                lon REAL,
-                                city TEXT,
-                                postcode TEXT,
-                                cityId INTEGER,
-                                zoneId INTEGER,
-                                geohash TEXT
-                            )''')
+        # Create tables if they don't exist
+        c.execute('''CREATE TABLE IF NOT EXISTS restaurant (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        address TEXT,
+                        neighborhood TEXT,
+                        lat REAL,
+                        lon REAL,
+                        city TEXT,
+                        postcode TEXT,
+                        cityId INTEGER,
+                        zoneId INTEGER,
+                        geohash TEXT
+                    )''')
 
-                c.execute('''CREATE TABLE IF NOT EXISTS menu (
-                                id INTEGER PRIMARY KEY,
-                                restaurant_id INTEGER,
-                                name TEXT,
-                                description TEXT,
-                                price TEXT,
-                                image_url TEXT,
-                                FOREIGN KEY (restaurant_id) REFERENCES restaurant (id)
-                            )''')
+        c.execute('''CREATE TABLE IF NOT EXISTS menu (
+                        id INTEGER PRIMARY KEY,
+                        restaurant_id INTEGER,
+                        name TEXT,
+                        description TEXT,
+                        price TEXT,
+                        image_url TEXT,
+                        FOREIGN KEY (restaurant_id) REFERENCES restaurant (id)
+                    )''')
+        
+        # Update the restaurant details insertion query
+        c.execute('''INSERT INTO restaurant 
+                     (name, address, neighborhood, lat, lon, city, postcode, cityId, zoneId, geohash) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (self.__restaurant_details['name'], self.__restaurant_details['address'],
+                   self.__restaurant_details['neighborhood'], self.__restaurant_details['lat'],
+                   self.__restaurant_details['lon'], self.__restaurant_details['city'],
+                   self.__restaurant_details['postcode'], self.__restaurant_details['cityId'],
+                   self.__restaurant_details['zoneId'], self.__restaurant_details['geohash']))
+        restaurant_id = c.lastrowid
 
-                # Insert restaurant details
-                c.execute('''INSERT INTO restaurant 
-                             (name, address, neighborhood, lat, lon, city, postcode, cityId, zoneId, geohash) 
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                          (self.__restaurant_details['name'], self.__restaurant_details['address'],
-                           self.__restaurant_details['neighborhood'], self.__restaurant_details['lat'],
-                           self.__restaurant_details['lon'], self.__restaurant_details['city'],
-                           self.__restaurant_details['postcode'], self.__restaurant_details['cityId'],
-                           self.__restaurant_details['zoneId'], self.__restaurant_details['geohash']))
-                restaurant_id = c.lastrowid
+        # Insert menu items
+        for item in self.__restaurant_menu_details:
+            c.execute('INSERT INTO menu (restaurant_id, name, description, price, image_url) VALUES (?, ?, ?, ?, ?)',
+                        (restaurant_id, item['name'], item['description'], item['price'], item['image_url']))
 
-                # Insert menu items
-                for item in self.__restaurant_menu_details:
-                    c.execute('INSERT INTO menu (restaurant_id, name, description, price, image_url) VALUES (?, ?, ?, ?, ?)',
-                              (restaurant_id, item['name'], item['description'], item['price'], item['image_url']))
-
-                # Commit is handled automatically by the context manager
-
-        except sqlite3.Error as e:
-            logging.error(f"SQLite error: {e}")
-            # Optionally, handle or re-raise
-
-        except Exception as e:
-            logging.error(f"General error in save_to_db: {e}")
-            # Optionally, handle or re-raise
+        # Commit and close
+        conn.commit()
+        conn.close()
 
 
 # Function to read URLs from a file
@@ -245,7 +208,7 @@ def scrape_urls(file_path, db_name):
     failed_urls = []
 
     # Define the maximum number of threads
-    MAX_THREADS = 50  # Start with a lower number and adjust as needed
+    MAX_THREADS = 5  # Start with a lower number and adjust as needed
 
     # Using ThreadPoolExecutor to create and manage threads
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
@@ -268,8 +231,8 @@ def scrape_urls(file_path, db_name):
             file.write(url + '\n')
 
 # Example usage
-input_file = "../url_collector/data/dubai/dubai_rest_links_deliveroo.txt"  # Path to the file containing URLs
-scrape_urls(input_file, "deliveroo_dubai_2.db")
+input_file = "failed_urls_test.txt"  # Path to the file containing URLs
+scrape_urls(input_file, "deliveroo_dubai_27614failed_test.db")
 
 
 # Example usage
