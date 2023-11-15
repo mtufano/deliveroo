@@ -206,7 +206,7 @@ def scrape_urls(file_path, db_name):
             file.write(url + '\n')
 
 # Example usage
-input_file = "../url_collector/data/dubai/dubai_rest_links_deliveroo_unique.txt"  # Path to the file containing URLs
+input_file = "../url_collector/data/dubai/dubai_rest_links_deliveroo.txt"  # Path to the file containing URLs
 scrape_urls(input_file, "deliveroo_data.db")
 
 # Example usage

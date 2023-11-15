@@ -70,6 +70,5 @@ class URLCollector:
                     f.write(link + "\n")
 
 # Usage
-dubai_list = [...] # Your list of URLs
 url_collector = URLCollector(dubai_list)
 url_collector.create_directory()
